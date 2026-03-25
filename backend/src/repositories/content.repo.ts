@@ -1,5 +1,6 @@
 import { prisma } from "../config/prisma";
 import { Prisma } from "@prisma/client";
+import { dbCall } from "../utils/db";
 
 export type ContentFilters = {
   search?: string;
@@ -34,25 +35,29 @@ export const contentRepo = {
       where.language = filters.language as Prisma.ContentWhereInput["language"];
     }
 
-    return prisma.content.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      include: { createdBy: true }
-    });
+    return dbCall(() =>
+      prisma.content.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        include: { createdBy: true }
+      })
+    );
   },
   getById(id: string) {
-    return prisma.content.findUnique({
-      where: { id },
-      include: { createdBy: true }
-    });
+    return dbCall(() =>
+      prisma.content.findUnique({
+        where: { id },
+        include: { createdBy: true }
+      })
+    );
   },
   create(data: Prisma.ContentCreateInput) {
-    return prisma.content.create({ data });
+    return dbCall(() => prisma.content.create({ data }));
   },
   update(id: string, data: Prisma.ContentUpdateInput) {
-    return prisma.content.update({ where: { id }, data });
+    return dbCall(() => prisma.content.update({ where: { id }, data }));
   },
   delete(id: string) {
-    return prisma.content.delete({ where: { id } });
+    return dbCall(() => prisma.content.delete({ where: { id } }));
   }
 };

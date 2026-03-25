@@ -1,5 +1,10 @@
+import { Prisma } from "@prisma/client";
 import { templateRepo } from "../repositories/template.repo";
 import { AppError } from "../utils/errors";
+
+function toJson(value: unknown) {
+  return value as Prisma.InputJsonValue;
+}
 
 export const templateService = {
   list() {
@@ -17,7 +22,7 @@ export const templateService = {
       name: data.name,
       contentType: data.contentType as never,
       description: data.description,
-      defaultStructure: data.defaultStructure
+      defaultStructure: toJson(data.defaultStructure)
     });
   },
   update(id: string, data: Partial<{ name: string; contentType: string; description: string; defaultStructure: Record<string, unknown> }>) {
@@ -25,7 +30,7 @@ export const templateService = {
       name: data.name,
       contentType: data.contentType as never,
       description: data.description,
-      defaultStructure: data.defaultStructure
+      defaultStructure: data.defaultStructure ? toJson(data.defaultStructure) : undefined
     });
   },
   delete(id: string) {

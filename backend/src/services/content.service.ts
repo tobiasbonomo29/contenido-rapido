@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { contentRepo } from "../repositories/content.repo";
 import { AppError } from "../utils/errors";
 
@@ -17,6 +18,10 @@ type ContentInput = {
   publishedAt?: string | null;
   metrics?: Record<string, unknown> | null;
 };
+
+function toJson(value: unknown) {
+  return value as Prisma.InputJsonValue;
+}
 
 function canTransition(current: Status, next: Status) {
   if (current === next) return true;
@@ -52,7 +57,7 @@ export const contentService = {
       language: data.language as never,
       scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
       publishedAt: data.publishedAt ? new Date(data.publishedAt) : undefined,
-      metrics: data.metrics ?? undefined,
+      metrics: data.metrics ? toJson(data.metrics) : undefined,
       createdBy: { connect: { id: createdById } }
     });
   },
@@ -85,7 +90,7 @@ export const contentService = {
       language: data.language as never,
       scheduledAt: data.scheduledAt === null ? null : data.scheduledAt ? new Date(data.scheduledAt) : undefined,
       publishedAt: nextPublishedAt,
-      metrics: data.metrics === null ? null : data.metrics
+      metrics: data.metrics === null ? Prisma.JsonNull : data.metrics ? toJson(data.metrics) : undefined
     });
   },
   async updateStatus(id: string, status: Status) {
@@ -120,7 +125,7 @@ export const contentService = {
       imageUrl: existing.imageUrl || undefined,
       status: "DRAFT",
       language: existing.language,
-      metrics: existing.metrics ?? undefined,
+      metrics: existing.metrics ? toJson(existing.metrics) : undefined,
       createdBy: { connect: { id: existing.createdById } }
     });
   }

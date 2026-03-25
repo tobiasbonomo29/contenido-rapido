@@ -6,6 +6,51 @@ const TOKEN_KEY = "pcms_token";
 
 export type ApiPublicationPlatform = "LINKEDIN" | "FACEBOOK";
 export type ApiPublicationStatus = "PENDING" | "SENT" | "FAILED" | "CANCELED";
+export type ApiVideoDraftStatus = "DRAFT" | "SCRIPT_READY" | "PREVIEW_READY" | "APPROVED" | "RENDERED" | "SCHEDULED" | "PUBLISHED";
+export type ApiVideoStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+
+export type ApiVideoDraft = {
+  id: string;
+  contentId: string;
+  hook: string;
+  fullScript: string;
+  subtitlesText: string;
+  voiceoverText: string;
+  visualPrompt: string;
+  targetDurationSeconds: number;
+  targetAspectRatio: string;
+  voiceStyle: string;
+  visualStyle: string;
+  status: ApiVideoDraftStatus;
+  approvedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ApiVideoGeneration = {
+  id: string;
+  contentId: string;
+  videoDraftId?: string | null;
+  provider: string;
+  externalJobId?: string | null;
+  status: ApiVideoStatus;
+  videoUrl?: string | null;
+  errorMessage?: string | null;
+  subtitlesText?: string | null;
+  voiceoverText?: string | null;
+  providerMetadata?: Record<string, unknown> | null;
+  createdAt: string;
+  updatedAt: string;
+  content?: {
+    id: string;
+    title: string;
+    status: string;
+  };
+  videoDraft?: {
+    id: string;
+    status: string;
+  } | null;
+};
 
 export type ApiPublicationJob = {
   id: string;
@@ -168,13 +213,41 @@ export const api = {
       ideaCount: number;
       draftCount: number;
       publishedCount: number;
+      videoGenerationCounts: {
+        pending: number;
+        processing: number;
+        completed: number;
+        failed: number;
+      };
       recentContent: unknown[];
+      recentVideoGenerations: ApiVideoGeneration[];
       upcomingScheduledPublications: ApiPublicationJob[];
     }>("/dashboard/summary");
   },
   getPublications(contentId?: string) {
     const query = contentId ? `?${new URLSearchParams({ contentId }).toString()}` : "";
     return request<ApiPublicationJob[]>(`/publications${query}`);
+  },
+  getVideoDrafts(contentId: string) {
+    return request<ApiVideoDraft[]>(`/video-drafts/content/${contentId}`);
+  },
+  generateVideoDraft(contentId: string) {
+    return request<ApiVideoDraft>(`/video-drafts/generate/${contentId}`, {
+      method: "POST"
+    });
+  },
+  approveVideoDraft(id: string) {
+    return request<ApiVideoDraft>(`/video-drafts/${id}/approve`, {
+      method: "PATCH"
+    });
+  },
+  getVideos(contentId: string) {
+    return request<ApiVideoGeneration[]>(`/videos/content/${contentId}`);
+  },
+  generateVideo(contentId: string) {
+    return request<ApiVideoGeneration>(`/videos/generate/${contentId}`, {
+      method: "POST"
+    });
   },
   schedulePublication(body: {
     contentId: string;

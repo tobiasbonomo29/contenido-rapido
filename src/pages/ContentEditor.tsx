@@ -9,8 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, CheckCircle2, Copy, Eye, CalendarClock, XCircle } from 'lucide-react';
-import { api, ApiPublicationJob, ApiPublicationPlatform } from '@/lib/api';
+import { ArrowLeft, Save, CheckCircle2, Copy, Eye, CalendarClock, XCircle, Wand2, Clapperboard, RefreshCw } from 'lucide-react';
+import { api, ApiPublicationJob, ApiPublicationPlatform, ApiVideoDraft, ApiVideoGeneration } from '@/lib/api';
 import { ApiContent, toApiContentInput, toContentItem } from '@/lib/mappers';
 
 function toDateTimeLocalValue(value?: string | null) {
@@ -50,6 +50,23 @@ const publicationStatusLabels: Record<ApiPublicationJob['status'], string> = {
   CANCELED: 'Cancelado'
 };
 
+const videoDraftStatusLabels: Record<ApiVideoDraft['status'], string> = {
+  DRAFT: 'Borrador',
+  SCRIPT_READY: 'Guion listo',
+  PREVIEW_READY: 'Preview listo',
+  APPROVED: 'Aprobado',
+  RENDERED: 'Renderizado',
+  SCHEDULED: 'Programado',
+  PUBLISHED: 'Publicado'
+};
+
+const videoStatusLabels: Record<ApiVideoGeneration['status'], string> = {
+  PENDING: 'Pendiente',
+  PROCESSING: 'Procesando',
+  COMPLETED: 'Completado',
+  FAILED: 'Fallido'
+};
+
 export default function ContentEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -74,11 +91,31 @@ export default function ContentEditor() {
   const [scheduleAt, setScheduleAt] = useState('');
   const [publicationJobs, setPublicationJobs] = useState<ApiPublicationJob[]>([]);
   const [isScheduling, setIsScheduling] = useState(false);
+  const [videoDrafts, setVideoDrafts] = useState<ApiVideoDraft[]>([]);
+  const [videos, setVideos] = useState<ApiVideoGeneration[]>([]);
+  const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
+  const [isApprovingDraft, setIsApprovingDraft] = useState(false);
+  const [isGeneratingVideo, setIsGeneratingVideo] = useState(false);
 
   const loadPublicationJobs = async (contentId: string) => {
     const jobs = await api.getPublications(contentId);
     setPublicationJobs(jobs);
   };
+
+  const loadVideoDrafts = async (contentId: string) => {
+    const drafts = await api.getVideoDrafts(contentId);
+    setVideoDrafts(drafts);
+    return drafts;
+  };
+
+  const loadVideos = async (contentId: string) => {
+    const nextVideos = await api.getVideos(contentId);
+    setVideos(nextVideos);
+    return nextVideos;
+  };
+
+  const latestVideoDraft = videoDrafts[0] ?? null;
+  const hasActiveVideos = videos.some((video) => video.status === 'PENDING' || video.status === 'PROCESSING');
 
   useEffect(() => {
     async function loadContent() {
@@ -99,7 +136,7 @@ export default function ContentEditor() {
         setFecha(mapped.fecha ? mapped.fecha.slice(0, 10) : '');
         setImageUrl(mapped.imagen || '');
         setScheduleAt(toDateTimeLocalValue(data.scheduledAt));
-        await loadPublicationJobs(id);
+        await Promise.all([loadPublicationJobs(id), loadVideoDrafts(id), loadVideos(id)]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'No se pudo cargar el contenido');
       }
@@ -107,6 +144,18 @@ export default function ContentEditor() {
 
     loadContent();
   }, [id, isNew]);
+
+  useEffect(() => {
+    if (!id || isNew || !hasActiveVideos) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      loadVideos(id).catch(() => undefined);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, [hasActiveVideos, id, isNew]);
 
   const handleSave = async () => {
     const nextErrors: Record<string, string> = {};
@@ -228,6 +277,54 @@ export default function ContentEditor() {
       await Promise.all([refreshContent(id), loadPublicationJobs(id)]);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'No se pudo cancelar la publicacion');
+    }
+  };
+
+  const handleGenerateVideoDraft = async () => {
+    if (!id) return;
+
+    setIsGeneratingDraft(true);
+    setError('');
+
+    try {
+      await api.generateVideoDraft(id);
+      await loadVideoDrafts(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo generar el draft de video');
+    } finally {
+      setIsGeneratingDraft(false);
+    }
+  };
+
+  const handleApproveVideoDraft = async (draftId: string) => {
+    if (!id) return;
+
+    setIsApprovingDraft(true);
+    setError('');
+
+    try {
+      await api.approveVideoDraft(draftId);
+      await Promise.all([loadVideoDrafts(id), loadVideos(id)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo aprobar el draft de video');
+    } finally {
+      setIsApprovingDraft(false);
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!id) return;
+
+    setIsGeneratingVideo(true);
+    setError('');
+
+    try {
+      await api.generateVideo(id);
+      await loadVideos(id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo generar el video');
+    } finally {
+      setIsGeneratingVideo(false);
     }
   };
 
@@ -354,6 +451,100 @@ export default function ContentEditor() {
                     <p className="text-xl font-display font-bold text-card-foreground">{(existing.metrics as any)?.shares ?? '—'}</p>
                     <p className="text-xs text-muted-foreground">Compartidos</p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {!isNew && id && (
+              <div className="rounded-xl border border-border bg-card p-5 shadow-card space-y-4">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Wand2 className="h-4 w-4 text-primary" />
+                  <h3 className="font-display text-sm font-semibold text-card-foreground">Pipeline de video AI</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-8 px-2 text-xs"
+                    onClick={() => Promise.all([loadVideoDrafts(id), loadVideos(id)])}
+                  >
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> Actualizar
+                  </Button>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleGenerateVideoDraft} disabled={isGeneratingDraft}>
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    {isGeneratingDraft ? 'Generando draft...' : 'Generar draft'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => latestVideoDraft && handleApproveVideoDraft(latestVideoDraft.id)}
+                    disabled={!latestVideoDraft || latestVideoDraft.status === 'APPROVED' || isApprovingDraft}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    {isApprovingDraft ? 'Aprobando...' : 'Aprobar draft'}
+                  </Button>
+                  <Button
+                    onClick={handleGenerateVideo}
+                    disabled={!latestVideoDraft || latestVideoDraft.status !== 'APPROVED' || isGeneratingVideo}
+                  >
+                    <Clapperboard className="h-4 w-4 mr-2" />
+                    {isGeneratingVideo ? 'Generando video...' : 'Generar video AI'}
+                  </Button>
+                </div>
+
+                {latestVideoDraft ? (
+                  <div className="rounded-lg border border-border p-4 space-y-3">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="font-medium text-card-foreground">{videoDraftStatusLabels[latestVideoDraft.status]}</span>
+                      <span>{latestVideoDraft.targetDurationSeconds}s</span>
+                      <span>{latestVideoDraft.targetAspectRatio}</span>
+                      <span>{latestVideoDraft.visualStyle}</span>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Hook</p>
+                      <p className="text-sm text-card-foreground">{latestVideoDraft.hook}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Guion</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-line line-clamp-6">{latestVideoDraft.fullScript}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Direccion visual</p>
+                      <p className="text-sm text-muted-foreground whitespace-pre-line line-clamp-4">{latestVideoDraft.visualPrompt}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Todavia no hay drafts de video para este contenido.</p>
+                )}
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Videos generados</h4>
+                  {videos.length > 0 ? (
+                    videos.map((video) => (
+                      <div key={video.id} className="rounded-lg border border-border p-3 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="font-medium text-card-foreground">{video.provider}</span>
+                          <span>{videoStatusLabels[video.status]}</span>
+                          {video.videoDraftId && <span>Draft vinculado</span>}
+                        </div>
+                        {video.videoUrl ? (
+                          <a
+                            href={video.videoUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-sm text-primary underline underline-offset-4"
+                          >
+                            Abrir video
+                          </a>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">El asset final todavia no esta disponible.</p>
+                        )}
+                        {video.errorMessage && <p className="text-xs text-destructive">{video.errorMessage}</p>}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No hay videos generados todavia.</p>
+                  )}
                 </div>
               </div>
             )}

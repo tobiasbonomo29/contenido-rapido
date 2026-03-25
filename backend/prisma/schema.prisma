@@ -36,6 +36,16 @@ enum VideoStatus {
   FAILED
 }
 
+enum VideoDraftStatus {
+  DRAFT
+  SCRIPT_READY
+  PREVIEW_READY
+  APPROVED
+  RENDERED
+  SCHEDULED
+  PUBLISHED
+}
+
 enum PublicationPlatform {
   LINKEDIN
   FACEBOOK
@@ -77,6 +87,7 @@ model Content {
   createdById   String
   createdBy     User              @relation(fields: [createdById], references: [id])
   videos        VideoGeneration[]
+  videoDrafts   VideoDraft[]
   publicationJobs PublicationJob[]
 }
 
@@ -104,15 +115,53 @@ model VideoGeneration {
   id            String      @id @default(uuid())
   contentId     String
   content       Content     @relation(fields: [contentId], references: [id])
+  videoDraftId  String?
+  videoDraft    VideoDraft? @relation(fields: [videoDraftId], references: [id])
   promptUsed    String
   scriptUsed    String
   provider      String
+  externalJobId String?
   status        VideoStatus
   videoUrl      String?
+  errorMessage  String?
   subtitlesText String?
   voiceoverText String?
+  providerMetadata Json?
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
+
+  @@index([contentId])
+  @@index([videoDraftId])
+  @@index([status])
+  @@index([externalJobId])
+}
+
+model VideoDraft {
+  id                    String           @id @default(uuid())
+  contentId             String
+  content               Content          @relation(fields: [contentId], references: [id])
+  formatProfile         Json
+  hook                  String
+  sections              Json
+  fullScript            String
+  subtitlesText         String
+  subtitlesSegments     Json
+  voiceoverText         String
+  visualPrompt          String
+  sceneDirections       Json
+  brandingHints         Json?
+  targetDurationSeconds Int
+  targetAspectRatio     String
+  voiceStyle            String
+  visualStyle           String
+  status                VideoDraftStatus @default(SCRIPT_READY)
+  approvedAt            DateTime?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+  videoGenerations      VideoGeneration[]
+
+  @@index([contentId])
+  @@index([status])
 }
 
 model PublicationJob {

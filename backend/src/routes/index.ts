@@ -7,6 +7,7 @@ import { videoRoutes } from "./video.routes";
 import { publicationRoutes } from "./publication.routes";
 import { dashboardRoutes } from "./dashboard.routes";
 import { uploadRoutes } from "./upload.routes";
+import { videoDraftRoutes } from "./video-draft.routes";
 
 export const routes = Router();
 
@@ -15,6 +16,7 @@ routes.use("/contents", contentRoutes);
 routes.use("/templates", templateRoutes);
 routes.use("/sources", sourceRoutes);
 routes.use("/videos", videoRoutes);
+routes.use("/video-drafts", videoDraftRoutes);
 routes.use("/publications", publicationRoutes);
 routes.use("/dashboard", dashboardRoutes);
 routes.use("/uploads", uploadRoutes);

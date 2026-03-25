@@ -1,24 +1,36 @@
 import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { ContentCard } from '@/components/ContentCard';
-import { CheckCircle2, Lightbulb, Send, FileText, Clock } from 'lucide-react';
+import { CheckCircle2, Lightbulb, Send, FileText, Clock, Clapperboard, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { api, ApiPublicationJob } from '@/lib/api';
+import { api, ApiPublicationJob, ApiVideoGeneration } from '@/lib/api';
 import { ApiContent, toContentItem } from '@/lib/mappers';
-
-const summaryCards = [
-  { label: 'Listo para publicar', icon: CheckCircle2, color: 'text-status-ready', bgColor: 'bg-status-ready-bg', key: 'listo' as const },
-  { label: 'Banco de ideas', icon: Lightbulb, color: 'text-status-idea', bgColor: 'bg-status-idea-bg', key: 'idea' as const },
-  { label: 'Publicado', icon: Send, color: 'text-status-published', bgColor: 'bg-status-published-bg', key: 'publicado' as const },
-  { label: 'Total', icon: FileText, color: 'text-muted-foreground', bgColor: 'bg-muted', key: 'total' as const },
-];
 
 const publicationPlatformLabels = {
   LINKEDIN: 'LinkedIn',
   FACEBOOK: 'Facebook'
 } as const;
 
+const videoStatusLabels: Record<ApiVideoGeneration['status'], string> = {
+  PENDING: 'Pendiente',
+  PROCESSING: 'Procesando',
+  COMPLETED: 'Completado',
+  FAILED: 'Fallido'
+};
+
 function formatPublicationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+function formatDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -37,7 +49,9 @@ export default function Dashboard() {
   const [drafts, setDrafts] = useState<ApiContent[]>([]);
   const [published, setPublished] = useState<ApiContent[]>([]);
   const [upcomingPublications, setUpcomingPublications] = useState<ApiPublicationJob[]>([]);
+  const [recentVideos, setRecentVideos] = useState<ApiVideoGeneration[]>([]);
   const [counts, setCounts] = useState({ listo: 0, idea: 0, publicado: 0, total: 0 });
+  const [videoCounts, setVideoCounts] = useState({ activos: 0, completados: 0, fallidos: 0 });
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -59,12 +73,19 @@ export default function Dashboard() {
         setDrafts(draft);
         setPublished(publishedItems);
         setUpcomingPublications(summary.upcomingScheduledPublications);
+        setRecentVideos(summary.recentVideoGenerations);
 
         setCounts({
           listo: ready.length,
           idea: idea.length + draft.length,
           publicado: publishedItems.length,
           total: allContents.length
+        });
+
+        setVideoCounts({
+          activos: summary.videoGenerationCounts.pending + summary.videoGenerationCounts.processing,
+          completados: summary.videoGenerationCounts.completed,
+          fallidos: summary.videoGenerationCounts.failed
         });
       } catch (err) {
         setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
@@ -93,13 +114,20 @@ export default function Dashboard() {
         )}
 
         {/* Summary cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {summaryCards.map((card) => (
-            <div key={card.key} className="rounded-xl border border-border bg-card p-4 shadow-card">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+          {[
+            { label: 'Listo para publicar', icon: CheckCircle2, color: 'text-status-ready', bgColor: 'bg-status-ready-bg', value: counts.listo },
+            { label: 'Banco de ideas', icon: Lightbulb, color: 'text-status-idea', bgColor: 'bg-status-idea-bg', value: counts.idea },
+            { label: 'Publicado', icon: Send, color: 'text-status-published', bgColor: 'bg-status-published-bg', value: counts.publicado },
+            { label: 'Total', icon: FileText, color: 'text-muted-foreground', bgColor: 'bg-muted', value: counts.total },
+            { label: 'Videos activos', icon: Clapperboard, color: 'text-primary', bgColor: 'bg-primary/10', value: videoCounts.activos },
+            { label: 'Errores de IA', icon: AlertTriangle, color: 'text-destructive', bgColor: 'bg-destructive/10', value: videoCounts.fallidos },
+          ].map((card) => (
+            <div key={card.label} className="rounded-xl border border-border bg-card p-4 shadow-card">
               <div className={`inline-flex items-center justify-center h-8 w-8 rounded-lg ${card.bgColor} mb-2`}>
                 <card.icon className={`h-4 w-4 ${card.color}`} />
               </div>
-              <p className="text-2xl font-display font-bold text-card-foreground">{counts[card.key]}</p>
+              <p className="text-2xl font-display font-bold text-card-foreground">{card.value}</p>
               <p className="text-xs text-muted-foreground">{card.label}</p>
             </div>
           ))}
@@ -145,6 +173,50 @@ export default function Dashboard() {
               <ContentCard key={item.id} item={toContentItem(item)} />
             ))}
           </div>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold text-foreground">Pipeline de video</h2>
+            <p className="text-xs text-muted-foreground">
+              {videoCounts.completados} completados
+            </p>
+          </div>
+          {recentVideos.length > 0 ? (
+            <div className="grid gap-3">
+              {recentVideos.map((video) => (
+                <div key={video.id} className="rounded-xl border border-border bg-card p-4 shadow-card">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-sm font-semibold text-card-foreground">
+                      {video.content?.title || 'Contenido'}
+                    </p>
+                    <span className="text-xs text-muted-foreground">{video.provider}</span>
+                    <span className={`text-xs ${video.status === 'FAILED' ? 'text-destructive' : 'text-muted-foreground'}`}>
+                      {videoStatusLabels[video.status]}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{formatDateTime(video.updatedAt)}</span>
+                  </div>
+                  {video.videoUrl && (
+                    <a
+                      href={video.videoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-2 inline-block text-sm text-primary hover:underline"
+                    >
+                      Abrir video
+                    </a>
+                  )}
+                  {video.errorMessage && (
+                    <p className="mt-2 text-xs text-destructive">{video.errorMessage}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">Todavia no hay ejecuciones de video.</p>
+            </div>
+          )}
         </section>
 
         <section>

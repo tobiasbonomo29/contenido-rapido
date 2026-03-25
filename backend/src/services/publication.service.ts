@@ -1,5 +1,6 @@
 import { publicationRepo } from "../repositories/publication.repo";
 import { contentRepo } from "../repositories/content.repo";
+import { videoDraftRepo } from "../repositories/video-draft.repo";
 import { AppError } from "../utils/errors";
 
 export const publicationService = {
@@ -18,6 +19,14 @@ export const publicationService = {
 
     if (content.status !== "READY") {
       throw new AppError("Only READY content can be scheduled", 400);
+    }
+
+    const videoDraftCount = await videoDraftRepo.hasAnyByContent(contentId);
+    if (videoDraftCount > 0) {
+      const approvedVideoDraftCount = await videoDraftRepo.hasApprovedByContent(contentId);
+      if (approvedVideoDraftCount === 0) {
+        throw new AppError("An APPROVED video draft is required before scheduling this content", 400);
+      }
     }
 
     const when = new Date(scheduledAt);

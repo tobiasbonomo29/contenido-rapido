@@ -17,7 +17,7 @@ export const authService = {
     }
 
     const token = jwt.sign({ sub: user.id, email: user.email }, env.jwtSecret, {
-      expiresIn: env.jwtExpiresIn
+      expiresIn: env.jwtExpiresIn as jwt.SignOptions["expiresIn"]
     });
 
     return {
