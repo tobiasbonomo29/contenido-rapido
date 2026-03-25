@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { LayoutDashboard, Database, Palette, BookOpen, Plus, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/context/AuthContext';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -14,6 +15,7 @@ const navItems = [
 export function AppLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -51,7 +53,10 @@ export function AppLayout({ children }: { children: ReactNode }) {
             <Plus className="h-4 w-4 mr-2" /> Nuevo contenido
           </Button>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => {
+              logout();
+              navigate('/');
+            }}
             className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-accent transition-colors"
           >
             <LogOut className="h-4 w-4" /> Salir

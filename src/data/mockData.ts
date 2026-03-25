@@ -1,4 +1,4 @@
-export type ContentStatus = 'idea' | 'listo' | 'publicado';
+export type ContentStatus = 'idea' | 'borrador' | 'listo' | 'publicado';
 export type ContentLanguage = 'es' | 'en';
 export type ContentType = 'sabias-que' | 'infografia' | 'autor-libro' | 'quiz' | 'historia' | 'analisis';
 
@@ -28,6 +28,7 @@ export const contentTypeLabels: Record<ContentType, string> = {
 
 export const statusLabels: Record<ContentStatus, string> = {
   idea: 'Idea',
+  borrador: 'Borrador',
   listo: 'Listo',
   publicado: 'Publicado',
 };

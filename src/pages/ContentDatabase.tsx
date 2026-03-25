@@ -1,13 +1,15 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
-import { mockContent, contentTypeLabels, statusLabels, ContentStatus, ContentType, ContentLanguage } from '@/data/mockData';
+import { contentTypeLabels, statusLabels, ContentStatus, ContentType, ContentLanguage } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LanguageBadge } from '@/components/LanguageBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Plus, Search } from 'lucide-react';
+import { api } from '@/lib/api';
+import { ApiContent, toContentItem, toApiFilters } from '@/lib/mappers';
 
 export default function ContentDatabase() {
   const navigate = useNavigate();
@@ -15,17 +17,32 @@ export default function ContentDatabase() {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterLang, setFilterLang] = useState<string>('all');
+  const [contents, setContents] = useState<ApiContent[]>([]);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    async function loadContents() {
+      try {
+        const filters = toApiFilters({
+          search: search || undefined,
+          contentType: filterType === 'all' ? undefined : (filterType as ContentType),
+          status: filterStatus === 'all' ? undefined : (filterStatus as ContentStatus),
+          language: filterLang === 'all' ? undefined : (filterLang as ContentLanguage)
+        });
+
+        const data = await api.getContents(filters as Record<string, string | undefined>);
+        setContents(data as ApiContent[]);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar contenido');
+      }
+    }
+
+    loadContents();
+  }, [search, filterType, filterStatus, filterLang]);
 
   const filtered = useMemo(() => {
-    return mockContent.filter((item) => {
-      const matchesSearch = item.titulo.toLowerCase().includes(search.toLowerCase()) ||
-        item.texto.toLowerCase().includes(search.toLowerCase());
-      const matchesType = filterType === 'all' || item.tipo === filterType;
-      const matchesStatus = filterStatus === 'all' || item.estado === filterStatus;
-      const matchesLang = filterLang === 'all' || item.idioma === filterLang;
-      return matchesSearch && matchesType && matchesStatus && matchesLang;
-    });
-  }, [search, filterType, filterStatus, filterLang]);
+    return contents.map((item) => toContentItem(item));
+  }, [contents]);
 
   return (
     <AppLayout>
@@ -33,12 +50,18 @@ export default function ContentDatabase() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl font-bold text-foreground">Contenido</h1>
-            <p className="text-sm text-muted-foreground">{mockContent.length} publicaciones</p>
+            <p className="text-sm text-muted-foreground">{filtered.length} publicaciones</p>
           </div>
           <Button onClick={() => navigate('/contenido/nuevo')}>
             <Plus className="h-4 w-4 mr-2" /> Nuevo contenido
           </Button>
         </div>
+
+        {error && (
+          <div className="rounded-xl border border-border bg-card p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
         {/* Filters */}
         <div className="flex flex-col sm:flex-row gap-3">

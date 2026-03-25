@@ -1,0 +1,129 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ContentStatus {
+  IDEA
+  DRAFT
+  READY
+  PUBLISHED
+}
+
+enum ContentType {
+  DID_YOU_KNOW
+  INFOGRAPHIC
+  AUTHOR_BOOK
+  QUIZ
+  HISTORY
+  ANALYSIS
+  DAILY_HEADLINES
+}
+
+enum Language {
+  ES
+  EN
+}
+
+enum VideoStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum PublicationPlatform {
+  LINKEDIN
+  FACEBOOK
+}
+
+enum PublicationStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  contents     Content[]
+}
+
+model Content {
+  id            String            @id @default(uuid())
+  title         String
+  objective     String
+  topic         String
+  contentType   ContentType
+  bodyText      String
+  source        String
+  imageUrl      String?
+  status        ContentStatus     @default(IDEA)
+  language      Language
+  scheduledAt   DateTime?
+  publishedAt   DateTime?
+  metrics       Json?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  createdById   String
+  createdBy     User              @relation(fields: [createdById], references: [id])
+  videos        VideoGeneration[]
+  publicationJobs PublicationJob[]
+}
+
+model Template {
+  id               String      @id @default(uuid())
+  name             String
+  contentType      ContentType
+  description      String
+  defaultStructure Json
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+}
+
+model Source {
+  id        String   @id @default(uuid())
+  name      String
+  url       String
+  category  String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model VideoGeneration {
+  id            String      @id @default(uuid())
+  contentId     String
+  content       Content     @relation(fields: [contentId], references: [id])
+  promptUsed    String
+  scriptUsed    String
+  provider      String
+  status        VideoStatus
+  videoUrl      String?
+  subtitlesText String?
+  voiceoverText String?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model PublicationJob {
+  id            String              @id @default(uuid())
+  contentId     String
+  content       Content             @relation(fields: [contentId], references: [id])
+  platform      PublicationPlatform
+  scheduledAt   DateTime
+  status        PublicationStatus
+  externalPostId String?
+  errorMessage  String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}

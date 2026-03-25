@@ -4,15 +4,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Zap } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate('/dashboard');
+    setError('');
+    setIsLoading(true);
+
+    try {
+      await login(email, password);
+      navigate('/dashboard');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo iniciar sesión');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -49,8 +63,11 @@ export default function Login() {
               className="h-11"
             />
           </div>
-          <Button type="submit" className="w-full h-11 font-semibold">
-            Ingresar
+          {error && (
+            <p className="text-xs text-destructive">{error}</p>
+          )}
+          <Button type="submit" className="w-full h-11 font-semibold" disabled={isLoading}>
+            {isLoading ? 'Ingresando...' : 'Ingresar'}
           </Button>
         </form>
 

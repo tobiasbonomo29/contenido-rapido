@@ -1,8 +1,24 @@
+import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
-import { sources } from '@/data/mockData';
 import { ExternalLink, Bookmark } from 'lucide-react';
+import { api } from '@/lib/api';
 
 export default function Sources() {
+  const [sources, setSources] = useState<any[]>([]);
+
+  useEffect(() => {
+    async function loadSources() {
+      try {
+        const data = await api.getSources();
+        setSources(data);
+      } catch (_err) {
+        setSources([]);
+      }
+    }
+
+    loadSources();
+  }, []);
+
   return (
     <AppLayout>
       <div className="p-4 lg:p-8 max-w-4xl mx-auto space-y-6 animate-fade-in">
@@ -27,10 +43,10 @@ export default function Sources() {
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-display text-sm font-semibold text-card-foreground flex items-center gap-1.5">
-                  {source.nombre}
+                  {source.name}
                   <ExternalLink className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </h3>
-                <p className="text-xs text-muted-foreground mt-1">{source.descripcion}</p>
+                <p className="text-xs text-muted-foreground mt-1">{source.category}</p>
               </div>
             </a>
           ))}

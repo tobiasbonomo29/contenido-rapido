@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppLayout } from '@/components/AppLayout';
-import { mockContent, contentTypeLabels, ContentType, ContentStatus, ContentLanguage } from '@/data/mockData';
+import { contentTypeLabels, ContentType, ContentStatus, ContentLanguage } from '@/data/mockData';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LanguageBadge } from '@/components/LanguageBadge';
 import { Button } from '@/components/ui/button';
@@ -9,23 +9,227 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save, CheckCircle2, Copy, Eye } from 'lucide-react';
+import { ArrowLeft, Save, CheckCircle2, Copy, Eye, CalendarClock, XCircle } from 'lucide-react';
+import { api, ApiPublicationJob, ApiPublicationPlatform } from '@/lib/api';
+import { ApiContent, toApiContentInput, toContentItem } from '@/lib/mappers';
+
+function toDateTimeLocalValue(value?: string | null) {
+  if (!value) return '';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const offset = date.getTimezoneOffset();
+  const localDate = new Date(date.getTime() - offset * 60_000);
+  return localDate.toISOString().slice(0, 16);
+}
+
+function formatPublicationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
+const publicationPlatformLabels: Record<ApiPublicationPlatform, string> = {
+  LINKEDIN: 'LinkedIn',
+  FACEBOOK: 'Facebook'
+};
+
+const publicationStatusLabels: Record<ApiPublicationJob['status'], string> = {
+  PENDING: 'Pendiente',
+  SENT: 'Enviado',
+  FAILED: 'Fallido',
+  CANCELED: 'Cancelado'
+};
 
 export default function ContentEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const isNew = id === 'nuevo';
-  const existing = !isNew ? mockContent.find((c) => c.id === id) : null;
+  const [existing, setExisting] = useState<ApiContent | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState('');
 
-  const [titulo, setTitulo] = useState(existing?.titulo || '');
-  const [objetivo, setObjetivo] = useState(existing?.objetivo || '');
-  const [tema, setTema] = useState(existing?.tema || '');
-  const [tipo, setTipo] = useState<ContentType>(existing?.tipo || 'sabias-que');
-  const [texto, setTexto] = useState(existing?.texto || '');
-  const [fuente, setFuente] = useState(existing?.fuente || '');
-  const [estado, setEstado] = useState<ContentStatus>(existing?.estado || 'idea');
-  const [idioma, setIdioma] = useState<ContentLanguage>(existing?.idioma || 'es');
-  const [fecha, setFecha] = useState(existing?.fecha || '');
+  const [titulo, setTitulo] = useState('');
+  const [objetivo, setObjetivo] = useState('');
+  const [tema, setTema] = useState('');
+  const [tipo, setTipo] = useState<ContentType>('sabias-que');
+  const [texto, setTexto] = useState('');
+  const [fuente, setFuente] = useState('');
+  const [estado, setEstado] = useState<ContentStatus>('idea');
+  const [idioma, setIdioma] = useState<ContentLanguage>('es');
+  const [fecha, setFecha] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [schedulePlatform, setSchedulePlatform] = useState<ApiPublicationPlatform>('LINKEDIN');
+  const [scheduleAt, setScheduleAt] = useState('');
+  const [publicationJobs, setPublicationJobs] = useState<ApiPublicationJob[]>([]);
+  const [isScheduling, setIsScheduling] = useState(false);
+
+  const loadPublicationJobs = async (contentId: string) => {
+    const jobs = await api.getPublications(contentId);
+    setPublicationJobs(jobs);
+  };
+
+  useEffect(() => {
+    async function loadContent() {
+      if (isNew || !id) return;
+      try {
+        const data = (await api.getContent(id)) as ApiContent;
+        setExisting(data);
+
+        const mapped = toContentItem(data);
+        setTitulo(mapped.titulo);
+        setObjetivo(mapped.objetivo);
+        setTema(mapped.tema);
+        setTipo(mapped.tipo);
+        setTexto(mapped.texto);
+        setFuente(mapped.fuente);
+        setEstado(mapped.estado);
+        setIdioma(mapped.idioma);
+        setFecha(mapped.fecha ? mapped.fecha.slice(0, 10) : '');
+        setImageUrl(mapped.imagen || '');
+        setScheduleAt(toDateTimeLocalValue(data.scheduledAt));
+        await loadPublicationJobs(id);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el contenido');
+      }
+    }
+
+    loadContent();
+  }, [id, isNew]);
+
+  const handleSave = async () => {
+    const nextErrors: Record<string, string> = {};
+    if (!titulo.trim()) nextErrors.titulo = 'El titulo es obligatorio';
+    if (!objetivo.trim()) nextErrors.objetivo = 'El objetivo es obligatorio';
+    if (!tema.trim()) nextErrors.tema = 'El tema es obligatorio';
+    if (!texto.trim()) nextErrors.texto = 'El texto es obligatorio';
+    if (!fuente.trim()) nextErrors.fuente = 'La fuente es obligatoria';
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      setError('Completa los campos requeridos');
+      return;
+    }
+
+    setIsSaving(true);
+    setError('');
+    setFieldErrors({});
+
+    const payload = toApiContentInput({
+      id: id || '',
+      titulo,
+      objetivo,
+      tema,
+      tipo,
+      texto,
+      fuente,
+      imagen: imageUrl || undefined,
+      estado,
+      idioma,
+      fecha,
+    });
+
+    try {
+      if (isNew) {
+        const created = (await api.createContent(payload)) as ApiContent;
+        navigate(`/contenido/${created.id}`);
+      } else if (id) {
+        await api.updateContent(id, payload);
+        const refreshed = (await api.getContent(id)) as ApiContent;
+        setExisting(refreshed);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo guardar');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setIsUploading(true);
+    setError('');
+
+    try {
+      const result = await api.uploadImage(file);
+      setImageUrl(result.imageUrl);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo subir la imagen');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleMarkReady = async () => {
+    if (!id) return;
+    try {
+      if (estado === 'idea') {
+        await api.updateContentStatus(id, 'DRAFT');
+      }
+      await api.updateContentStatus(id, 'READY');
+      setEstado('listo');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo actualizar el estado');
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!id) return;
+    const duplicated = (await api.duplicateContent(id)) as ApiContent;
+    navigate(`/contenido/${duplicated.id}`);
+  };
+
+  const refreshContent = async (contentId: string) => {
+    const refreshed = (await api.getContent(contentId)) as ApiContent;
+    setExisting(refreshed);
+    setScheduleAt(toDateTimeLocalValue(refreshed.scheduledAt));
+    setFecha(refreshed.scheduledAt ? refreshed.scheduledAt.slice(0, 10) : '');
+    return refreshed;
+  };
+
+  const handleSchedulePublication = async () => {
+    if (!id || !scheduleAt) return;
+
+    setIsScheduling(true);
+    setError('');
+
+    try {
+      await api.schedulePublication({
+        contentId: id,
+        platform: schedulePlatform,
+        scheduledAt: new Date(scheduleAt).toISOString()
+      });
+
+      await Promise.all([refreshContent(id), loadPublicationJobs(id)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo programar la publicacion');
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleCancelPublication = async (jobId: string) => {
+    if (!id) return;
+
+    setError('');
+
+    try {
+      await api.cancelPublication(jobId);
+      await Promise.all([refreshContent(id), loadPublicationJobs(id)]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo cancelar la publicacion');
+    }
+  };
 
   return (
     <AppLayout>
@@ -49,15 +253,18 @@ export default function ContentEditor() {
               <div className="space-y-2">
                 <Label>Título</Label>
                 <Input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título del contenido" />
+                {fieldErrors.titulo && <p className="text-xs text-destructive">{fieldErrors.titulo}</p>}
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Objetivo</Label>
                   <Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="¿Qué busca esta publicación?" />
+                  {fieldErrors.objetivo && <p className="text-xs text-destructive">{fieldErrors.objetivo}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Tema</Label>
                   <Input value={tema} onChange={(e) => setTema(e.target.value)} placeholder="Ej: Economía, Tecnología" />
+                  {fieldErrors.tema && <p className="text-xs text-destructive">{fieldErrors.tema}</p>}
                 </div>
               </div>
               <div className="grid sm:grid-cols-3 gap-4">
@@ -78,6 +285,7 @@ export default function ContentEditor() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="idea">Idea</SelectItem>
+                      <SelectItem value="borrador">Borrador</SelectItem>
                       <SelectItem value="listo">Listo</SelectItem>
                       <SelectItem value="publicado">Publicado</SelectItem>
                     </SelectContent>
@@ -97,47 +305,140 @@ export default function ContentEditor() {
               <div className="space-y-2">
                 <Label>Texto</Label>
                 <Textarea value={texto} onChange={(e) => setTexto(e.target.value)} rows={6} placeholder="Escribe el contenido aquí..." />
+                {fieldErrors.texto && <p className="text-xs text-destructive">{fieldErrors.texto}</p>}
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Fuente</Label>
                   <Input value={fuente} onChange={(e) => setFuente(e.target.value)} placeholder="Fuente de la información" />
+                  {fieldErrors.fuente && <p className="text-xs text-destructive">{fieldErrors.fuente}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label>Fecha</Label>
                   <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
                 </div>
               </div>
+              <div className="space-y-2">
+                <Label>Imagen</Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(file);
+                    }
+                  }}
+                />
+                {isUploading && <p className="text-xs text-muted-foreground">Subiendo imagen...</p>}
+                {imageUrl && (
+                  <img src={imageUrl} alt="Vista previa" className="mt-2 rounded-lg border border-border max-h-48 object-cover" />
+                )}
+              </div>
             </div>
 
             {/* Metrics placeholder */}
-            {existing?.metricas && (
+            {existing?.metrics && (
               <div className="rounded-xl border border-border bg-card p-5 shadow-card">
                 <h3 className="font-display text-sm font-semibold text-card-foreground mb-3">Métricas</h3>
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
-                    <p className="text-xl font-display font-bold text-card-foreground">{existing.metricas.likes}</p>
+                    <p className="text-xl font-display font-bold text-card-foreground">{(existing.metrics as any)?.likes ?? '—'}</p>
                     <p className="text-xs text-muted-foreground">Likes</p>
                   </div>
                   <div>
-                    <p className="text-xl font-display font-bold text-card-foreground">{existing.metricas.comments}</p>
+                    <p className="text-xl font-display font-bold text-card-foreground">{(existing.metrics as any)?.comments ?? '—'}</p>
                     <p className="text-xs text-muted-foreground">Comentarios</p>
                   </div>
                   <div>
-                    <p className="text-xl font-display font-bold text-card-foreground">{existing.metricas.shares}</p>
+                    <p className="text-xl font-display font-bold text-card-foreground">{(existing.metrics as any)?.shares ?? '—'}</p>
                     <p className="text-xs text-muted-foreground">Compartidos</p>
                   </div>
                 </div>
               </div>
             )}
 
+            {!isNew && id && (
+              <div className="rounded-xl border border-border bg-card p-5 shadow-card space-y-4">
+                <div className="flex items-center gap-2">
+                  <CalendarClock className="h-4 w-4 text-primary" />
+                  <h3 className="font-display text-sm font-semibold text-card-foreground">Programar publicacion</h3>
+                </div>
+
+                {estado !== 'listo' && (
+                  <p className="text-xs text-muted-foreground">
+                    Primero marca el contenido como listo para habilitar la programacion.
+                  </p>
+                )}
+
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Plataforma</Label>
+                    <Select value={schedulePlatform} onValueChange={(value) => setSchedulePlatform(value as ApiPublicationPlatform)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="LINKEDIN">LinkedIn</SelectItem>
+                        <SelectItem value="FACEBOOK">Facebook</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Fecha y hora</Label>
+                    <Input type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} />
+                  </div>
+                </div>
+
+                <Button onClick={handleSchedulePublication} disabled={isScheduling || estado !== 'listo' || !scheduleAt}>
+                  <CalendarClock className="h-4 w-4 mr-2" />
+                  {isScheduling ? 'Programando...' : 'Programar publicacion'}
+                </Button>
+
+                <div className="space-y-3">
+                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Publicaciones</h4>
+                  {publicationJobs.length > 0 ? (
+                    publicationJobs.map((job) => (
+                      <div key={job.id} className="rounded-lg border border-border p-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-medium text-card-foreground">{publicationPlatformLabels[job.platform]}</p>
+                          <span className="text-xs text-muted-foreground">{publicationStatusLabels[job.status]}</span>
+                          <span className="text-xs text-muted-foreground">{formatPublicationDate(job.scheduledAt)}</span>
+                          {job.status === 'PENDING' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="ml-auto h-7 px-2 text-xs"
+                              onClick={() => handleCancelPublication(job.id)}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" /> Cancelar
+                            </Button>
+                          )}
+                        </div>
+                        {job.errorMessage && (
+                          <p className="mt-2 text-xs text-destructive">{job.errorMessage}</p>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No hay publicaciones programadas todavia.</p>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Actions */}
+            {error && <p className="text-xs text-destructive">{error}</p>}
             <div className="flex flex-wrap gap-2">
-              <Button><Save className="h-4 w-4 mr-2" /> Guardar</Button>
-              <Button variant="outline" onClick={() => setEstado('listo')}>
+              <Button onClick={handleSave} disabled={isSaving}>
+                <Save className="h-4 w-4 mr-2" /> {isSaving ? 'Guardando...' : 'Guardar'}
+              </Button>
+              <Button variant="outline" onClick={handleMarkReady}>
                 <CheckCircle2 className="h-4 w-4 mr-2" /> Marcar como listo
               </Button>
-              <Button variant="outline"><Copy className="h-4 w-4 mr-2" /> Duplicar</Button>
+              {!isNew && (
+                <Button variant="outline" onClick={handleDuplicate}>
+                  <Copy className="h-4 w-4 mr-2" /> Duplicar
+                </Button>
+              )}
             </div>
           </div>
 

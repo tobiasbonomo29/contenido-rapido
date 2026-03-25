@@ -1,8 +1,10 @@
-import { mockContent } from '@/data/mockData';
+import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/AppLayout';
 import { ContentCard } from '@/components/ContentCard';
 import { CheckCircle2, Lightbulb, Send, FileText, Clock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { api, ApiPublicationJob } from '@/lib/api';
+import { ApiContent, toContentItem } from '@/lib/mappers';
 
 const summaryCards = [
   { label: 'Listo para publicar', icon: CheckCircle2, color: 'text-status-ready', bgColor: 'bg-status-ready-bg', key: 'listo' as const },
@@ -11,18 +13,66 @@ const summaryCards = [
   { label: 'Total', icon: FileText, color: 'text-muted-foreground', bgColor: 'bg-muted', key: 'total' as const },
 ];
 
+const publicationPlatformLabels = {
+  LINKEDIN: 'LinkedIn',
+  FACEBOOK: 'Facebook'
+} as const;
+
+function formatPublicationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat('es-AR', {
+    dateStyle: 'medium',
+    timeStyle: 'short'
+  }).format(date);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const readyContent = mockContent.filter((c) => c.estado === 'listo');
-  const ideas = mockContent.filter((c) => c.estado === 'idea');
-  const published = mockContent.filter((c) => c.estado === 'publicado');
+  const [readyContent, setReadyContent] = useState<ApiContent[]>([]);
+  const [ideas, setIdeas] = useState<ApiContent[]>([]);
+  const [drafts, setDrafts] = useState<ApiContent[]>([]);
+  const [published, setPublished] = useState<ApiContent[]>([]);
+  const [upcomingPublications, setUpcomingPublications] = useState<ApiPublicationJob[]>([]);
+  const [counts, setCounts] = useState({ listo: 0, idea: 0, publicado: 0, total: 0 });
+  const [error, setError] = useState('');
 
-  const counts = {
-    listo: readyContent.length,
-    idea: ideas.length,
-    publicado: published.length,
-    total: mockContent.length,
-  };
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const [contents, summary] = await Promise.all([
+          api.getContents(),
+          api.getDashboardSummary()
+        ]);
+
+        const allContents = contents as ApiContent[];
+        const ready = allContents.filter((item) => item.status === 'READY');
+        const idea = allContents.filter((item) => item.status === 'IDEA');
+        const draft = allContents.filter((item) => item.status === 'DRAFT');
+        const publishedItems = allContents.filter((item) => item.status === 'PUBLISHED');
+
+        setReadyContent(ready);
+        setIdeas(idea);
+        setDrafts(draft);
+        setPublished(publishedItems);
+        setUpcomingPublications(summary.upcomingScheduledPublications);
+
+        setCounts({
+          listo: ready.length,
+          idea: idea.length + draft.length,
+          publicado: publishedItems.length,
+          total: allContents.length
+        });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'No se pudo cargar el dashboard');
+      }
+    }
+
+    loadDashboard();
+  }, []);
 
   return (
     <AppLayout>
@@ -35,6 +85,12 @@ export default function Dashboard() {
             Publica contenido en menos de 5 minutos
           </p>
         </div>
+
+        {error && (
+          <div className="rounded-xl border border-border bg-card p-4 text-sm text-destructive">
+            {error}
+          </div>
+        )}
 
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -65,7 +121,7 @@ export default function Dashboard() {
           {readyContent.length > 0 ? (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {readyContent.map((item) => (
-                <ContentCard key={item.id} item={item} />
+                <ContentCard key={item.id} item={toContentItem(item)} />
               ))}
             </div>
           ) : (
@@ -85,10 +141,33 @@ export default function Dashboard() {
             <h2 className="font-display text-lg font-semibold text-foreground">Banco de ideas</h2>
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {ideas.map((item) => (
-              <ContentCard key={item.id} item={item} />
+            {[...ideas, ...drafts].map((item) => (
+              <ContentCard key={item.id} item={toContentItem(item)} />
             ))}
           </div>
+        </section>
+
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-display text-lg font-semibold text-foreground">Publicaciones programadas</h2>
+          </div>
+          {upcomingPublications.length > 0 ? (
+            <div className="grid gap-3">
+              {upcomingPublications.map((job) => (
+                <div key={job.id} className="rounded-xl border border-border bg-card p-4 shadow-card">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-display text-sm font-semibold text-card-foreground">{job.content?.title || 'Contenido'}</p>
+                    <span className="text-xs text-muted-foreground">{publicationPlatformLabels[job.platform]}</span>
+                    <span className="text-xs text-muted-foreground">{formatPublicationDate(job.scheduledAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border p-8 text-center">
+              <p className="text-sm text-muted-foreground">No hay publicaciones programadas.</p>
+            </div>
+          )}
         </section>
 
         {/* Published */}
@@ -98,7 +177,7 @@ export default function Dashboard() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {published.map((item) => (
-              <ContentCard key={item.id} item={item} />
+              <ContentCard key={item.id} item={toContentItem(item)} />
             ))}
           </div>
         </section>
