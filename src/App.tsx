@@ -11,6 +11,7 @@ import ContentDatabase from "./pages/ContentDatabase";
 import ContentEditor from "./pages/ContentEditor";
 import Templates from "./pages/Templates";
 import Sources from "./pages/Sources";
+import Channels from "./pages/Channels";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -35,6 +36,7 @@ const App = () => (
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/contenido" element={<ContentDatabase />} />
               <Route path="/contenido/:id" element={<ContentEditor />} />
+              <Route path="/canales" element={<Channels />} />
               <Route path="/plantillas" element={<Templates />} />
               <Route path="/fuentes" element={<Sources />} />
             </Route>

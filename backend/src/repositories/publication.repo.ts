@@ -14,7 +14,7 @@ export const publicationRepo = {
       prisma.publicationJob.findMany({
         where,
         orderBy: { scheduledAt: "desc" },
-        include: { content: true }
+        include: { content: true, socialConnection: true }
       })
     );
   },
@@ -22,15 +22,35 @@ export const publicationRepo = {
     return dbCall(() =>
       prisma.publicationJob.findUnique({
         where: { id },
-        include: { content: true }
+        include: { content: true, socialConnection: true }
       })
     );
   },
   create(data: Prisma.PublicationJobCreateInput) {
-    return dbCall(() => prisma.publicationJob.create({ data }));
+    return dbCall(() =>
+      prisma.publicationJob.create({
+        data,
+        include: { content: true, socialConnection: true }
+      })
+    );
+  },
+  getLatestByContent(contentId: string) {
+    return dbCall(() =>
+      prisma.publicationJob.findFirst({
+        where: { contentId },
+        orderBy: { createdAt: "desc" },
+        include: { content: true, socialConnection: true }
+      })
+    );
   },
   update(id: string, data: Prisma.PublicationJobUpdateInput) {
-    return dbCall(() => prisma.publicationJob.update({ where: { id }, data }));
+    return dbCall(() =>
+      prisma.publicationJob.update({
+        where: { id },
+        data,
+        include: { content: true, socialConnection: true }
+      })
+    );
   },
   getNextPendingByContent(contentId: string) {
     return dbCall(() =>
@@ -50,7 +70,7 @@ export const publicationRepo = {
           status: "PENDING",
           scheduledAt: { lte: now }
         },
-        include: { content: true }
+        include: { content: true, socialConnection: true }
       })
     );
   }

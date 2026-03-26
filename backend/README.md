@@ -52,6 +52,32 @@ A modular Node.js + Express backend for managing recurring content workflows for
   3. If `VIDEO_AUTO_GENERATE_ON_APPROVAL=true`, the backend automatically starts video generation
   4. Active jobs are synchronized by the scheduler and on API reads
 
+## Social Publishing
+- The backend now supports real publishing integrations for:
+  - LinkedIn Posts API
+  - Facebook Pages feed publishing
+- Required environment variables:
+  - `FRONTEND_APP_URL=http://localhost:8084`
+  - `LINKEDIN_CLIENT_ID=...`
+  - `LINKEDIN_CLIENT_SECRET=...`
+  - `LINKEDIN_REDIRECT_URI=http://localhost:4002/api/social-connections/oauth/linkedin/callback`
+  - `LINKEDIN_API_VERSION=202602`
+  - `LINKEDIN_SCOPES=openid,profile,email,w_member_social,w_organization_social,rw_organization_admin`
+  - `FACEBOOK_APP_ID=...`
+  - `FACEBOOK_APP_SECRET=...`
+  - `FACEBOOK_REDIRECT_URI=http://localhost:4002/api/social-connections/oauth/facebook/callback`
+  - `FACEBOOK_GRAPH_VERSION=v23.0`
+  - `FACEBOOK_SCOPES=pages_show_list,pages_read_engagement,pages_manage_posts,pages_manage_metadata,publish_video`
+- New flow:
+  1. Connect a channel from `/canales`
+  2. Select the connected account/page in the content scheduler
+  3. Schedule the publication
+  4. The cron job publishes it automatically through the real provider API
+- Current production-safe scope:
+  - Text publishing for LinkedIn member/org posts
+  - Text/link publishing for Facebook Pages
+- Media-native publishing (LinkedIn image/video assets and Facebook photo/video uploads) can be added on top of this base next.
+
 ## Test Endpoints
 Example login:
 ```

@@ -70,6 +70,21 @@ export const videoRepo = {
       })
     );
   },
+  getLatestCompletedByContent(contentId: string) {
+    return dbCall(() =>
+      prisma.videoGeneration.findFirst({
+        where: {
+          contentId,
+          status: "COMPLETED"
+        },
+        orderBy: { updatedAt: "desc" },
+        include: {
+          content: true,
+          videoDraft: true
+        }
+      })
+    );
+  },
   update(id: string, data: Prisma.VideoGenerationUpdateInput) {
     return dbCall(() =>
       prisma.videoGeneration.update({

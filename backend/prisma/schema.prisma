@@ -51,6 +51,20 @@ enum PublicationPlatform {
   FACEBOOK
 }
 
+enum SocialConnectionStatus {
+  ACTIVE
+  EXPIRED
+  REVOKED
+  ERROR
+  DISCONNECTED
+}
+
+enum SocialAccountType {
+  MEMBER
+  ORGANIZATION
+  PAGE
+}
+
 enum PublicationStatus {
   PENDING
   SENT
@@ -66,6 +80,7 @@ model User {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   contents     Content[]
+  socialConnections SocialConnection[]
 }
 
 model Content {
@@ -169,10 +184,46 @@ model PublicationJob {
   contentId     String
   content       Content             @relation(fields: [contentId], references: [id])
   platform      PublicationPlatform
+  socialConnectionId String?
+  socialConnection SocialConnection? @relation(fields: [socialConnectionId], references: [id])
   scheduledAt   DateTime
   status        PublicationStatus
   externalPostId String?
+  externalPostUrl String?
   errorMessage  String?
+  payloadSnapshot Json?
+  attemptCount  Int                 @default(0)
+  lastAttemptAt DateTime?
   createdAt     DateTime            @default(now())
   updatedAt     DateTime            @updatedAt
+
+  @@index([contentId])
+  @@index([socialConnectionId])
+  @@index([status])
+  @@index([platform])
+}
+
+model SocialConnection {
+  id                    String                 @id @default(uuid())
+  userId                String
+  user                  User                   @relation(fields: [userId], references: [id])
+  platform              PublicationPlatform
+  accountType           SocialAccountType
+  accountId             String
+  accountUrn            String?
+  accountName           String
+  accessToken           String
+  refreshToken          String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scopes                Json?
+  metadata              Json?
+  status                SocialConnectionStatus @default(ACTIVE)
+  lastSyncedAt          DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  publicationJobs       PublicationJob[]
+
+  @@unique([userId, platform, accountId])
+  @@index([userId, platform, status])
 }

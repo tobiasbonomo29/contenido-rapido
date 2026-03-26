@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, Save, CheckCircle2, Copy, Eye, CalendarClock, XCircle, Wand2, Clapperboard, RefreshCw } from 'lucide-react';
-import { api, ApiPublicationJob, ApiPublicationPlatform, ApiVideoDraft, ApiVideoGeneration } from '@/lib/api';
+import { api, ApiPublicationJob, ApiPublicationPlatform, ApiSocialConnection, ApiVideoDraft, ApiVideoGeneration } from '@/lib/api';
 import { ApiContent, toApiContentInput, toContentItem } from '@/lib/mappers';
 
 function toDateTimeLocalValue(value?: string | null) {
@@ -89,6 +89,8 @@ export default function ContentEditor() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [schedulePlatform, setSchedulePlatform] = useState<ApiPublicationPlatform>('LINKEDIN');
   const [scheduleAt, setScheduleAt] = useState('');
+  const [socialConnections, setSocialConnections] = useState<ApiSocialConnection[]>([]);
+  const [selectedSocialConnectionId, setSelectedSocialConnectionId] = useState('');
   const [publicationJobs, setPublicationJobs] = useState<ApiPublicationJob[]>([]);
   const [isScheduling, setIsScheduling] = useState(false);
   const [videoDrafts, setVideoDrafts] = useState<ApiVideoDraft[]>([]);
@@ -100,6 +102,12 @@ export default function ContentEditor() {
   const loadPublicationJobs = async (contentId: string) => {
     const jobs = await api.getPublications(contentId);
     setPublicationJobs(jobs);
+  };
+
+  const loadSocialConnections = async () => {
+    const connections = await api.getSocialConnections();
+    setSocialConnections(connections.filter((connection) => connection.status === 'ACTIVE'));
+    return connections;
   };
 
   const loadVideoDrafts = async (contentId: string) => {
@@ -116,6 +124,7 @@ export default function ContentEditor() {
 
   const latestVideoDraft = videoDrafts[0] ?? null;
   const hasActiveVideos = videos.some((video) => video.status === 'PENDING' || video.status === 'PROCESSING');
+  const availableConnections = socialConnections.filter((connection) => connection.platform === schedulePlatform);
 
   useEffect(() => {
     async function loadContent() {
@@ -136,7 +145,7 @@ export default function ContentEditor() {
         setFecha(mapped.fecha ? mapped.fecha.slice(0, 10) : '');
         setImageUrl(mapped.imagen || '');
         setScheduleAt(toDateTimeLocalValue(data.scheduledAt));
-        await Promise.all([loadPublicationJobs(id), loadVideoDrafts(id), loadVideos(id)]);
+        await Promise.all([loadPublicationJobs(id), loadVideoDrafts(id), loadVideos(id), loadSocialConnections()]);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'No se pudo cargar el contenido');
       }
@@ -156,6 +165,18 @@ export default function ContentEditor() {
 
     return () => window.clearInterval(interval);
   }, [hasActiveVideos, id, isNew]);
+
+  useEffect(() => {
+    if (availableConnections.length === 0) {
+      setSelectedSocialConnectionId('');
+      return;
+    }
+
+    const alreadySelected = availableConnections.some((connection) => connection.id === selectedSocialConnectionId);
+    if (!alreadySelected) {
+      setSelectedSocialConnectionId(availableConnections[0].id);
+    }
+  }, [availableConnections, selectedSocialConnectionId]);
 
   const handleSave = async () => {
     const nextErrors: Record<string, string> = {};
@@ -256,7 +277,8 @@ export default function ContentEditor() {
       await api.schedulePublication({
         contentId: id,
         platform: schedulePlatform,
-        scheduledAt: new Date(scheduleAt).toISOString()
+        scheduledAt: new Date(scheduleAt).toISOString(),
+        socialConnectionId: selectedSocialConnectionId || undefined
       });
 
       await Promise.all([refreshContent(id), loadPublicationJobs(id)]);
@@ -579,7 +601,30 @@ export default function ContentEditor() {
                   </div>
                 </div>
 
-                <Button onClick={handleSchedulePublication} disabled={isScheduling || estado !== 'listo' || !scheduleAt}>
+                <div className="space-y-2">
+                  <Label>Canal conectado</Label>
+                  {availableConnections.length > 0 ? (
+                    <Select value={selectedSocialConnectionId} onValueChange={setSelectedSocialConnectionId}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {availableConnections.map((connection) => (
+                          <SelectItem key={connection.id} value={connection.id}>
+                            {connection.accountName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                      No hay canales {publicationPlatformLabels[schedulePlatform]} conectados.{' '}
+                      <button className="text-primary hover:underline" onClick={() => navigate('/canales')}>
+                        Conectar ahora
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <Button onClick={handleSchedulePublication} disabled={isScheduling || estado !== 'listo' || !scheduleAt || availableConnections.length === 0}>
                   <CalendarClock className="h-4 w-4 mr-2" />
                   {isScheduling ? 'Programando...' : 'Programar publicacion'}
                 </Button>
@@ -591,6 +636,9 @@ export default function ContentEditor() {
                       <div key={job.id} className="rounded-lg border border-border p-3">
                         <div className="flex flex-wrap items-center gap-2">
                           <p className="text-sm font-medium text-card-foreground">{publicationPlatformLabels[job.platform]}</p>
+                          {job.socialConnection?.accountName && (
+                            <span className="text-xs text-muted-foreground">{job.socialConnection.accountName}</span>
+                          )}
                           <span className="text-xs text-muted-foreground">{publicationStatusLabels[job.status]}</span>
                           <span className="text-xs text-muted-foreground">{formatPublicationDate(job.scheduledAt)}</span>
                           {job.status === 'PENDING' && (
@@ -606,6 +654,16 @@ export default function ContentEditor() {
                         </div>
                         {job.errorMessage && (
                           <p className="mt-2 text-xs text-destructive">{job.errorMessage}</p>
+                        )}
+                        {job.externalPostUrl && (
+                          <a
+                            href={job.externalPostUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="mt-2 inline-block text-xs text-primary hover:underline"
+                          >
+                            Abrir publicacion
+                          </a>
                         )}
                       </div>
                     ))

@@ -6,6 +6,7 @@ export const schedulePublicationSchema = z.object({
   body: z.object({
     contentId: z.string().uuid(),
     platform: platformEnum,
-    scheduledAt: z.string().datetime()
+    scheduledAt: z.string().datetime(),
+    socialConnectionId: z.string().uuid().optional()
   })
 });

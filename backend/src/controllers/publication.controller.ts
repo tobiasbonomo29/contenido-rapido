@@ -5,8 +5,8 @@ import { success } from "../utils/response";
 export const publicationController = {
   async schedule(req: Request, res: Response, next: NextFunction) {
     try {
-      const { contentId, platform, scheduledAt } = req.body;
-      const job = await publicationService.schedule(contentId, platform, scheduledAt);
+      const { contentId, platform, scheduledAt, socialConnectionId } = req.body;
+      const job = await publicationService.schedule(contentId, platform, scheduledAt, req.user!.id, socialConnectionId);
       return success(res, "Publication scheduled successfully", job);
     } catch (error) {
       return next(error);

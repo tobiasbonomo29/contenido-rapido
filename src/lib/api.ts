@@ -6,6 +6,8 @@ const TOKEN_KEY = "pcms_token";
 
 export type ApiPublicationPlatform = "LINKEDIN" | "FACEBOOK";
 export type ApiPublicationStatus = "PENDING" | "SENT" | "FAILED" | "CANCELED";
+export type ApiSocialConnectionStatus = "ACTIVE" | "EXPIRED" | "REVOKED" | "ERROR" | "DISCONNECTED";
+export type ApiSocialAccountType = "MEMBER" | "ORGANIZATION" | "PAGE";
 export type ApiVideoDraftStatus = "DRAFT" | "SCRIPT_READY" | "PREVIEW_READY" | "APPROVED" | "RENDERED" | "SCHEDULED" | "PUBLISHED";
 export type ApiVideoStatus = "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
 
@@ -56,9 +58,11 @@ export type ApiPublicationJob = {
   id: string;
   contentId: string;
   platform: ApiPublicationPlatform;
+  socialConnectionId?: string | null;
   scheduledAt: string;
   status: ApiPublicationStatus;
   externalPostId?: string | null;
+  externalPostUrl?: string | null;
   errorMessage?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +71,26 @@ export type ApiPublicationJob = {
     title: string;
     status: string;
   };
+  socialConnection?: {
+    id: string;
+    accountName: string;
+    accountType: ApiSocialAccountType;
+    platform: ApiPublicationPlatform;
+  } | null;
+};
+
+export type ApiSocialConnection = {
+  id: string;
+  platform: ApiPublicationPlatform;
+  accountType: ApiSocialAccountType;
+  accountId: string;
+  accountUrn?: string | null;
+  accountName: string;
+  status: ApiSocialConnectionStatus;
+  accessTokenExpiresAt?: string | null;
+  lastSyncedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 type ApiErrorIssue = {
@@ -228,6 +252,20 @@ export const api = {
     const query = contentId ? `?${new URLSearchParams({ contentId }).toString()}` : "";
     return request<ApiPublicationJob[]>(`/publications${query}`);
   },
+  getSocialConnections(platform?: ApiPublicationPlatform) {
+    const query = platform ? `?${new URLSearchParams({ platform }).toString()}` : "";
+    return request<ApiSocialConnection[]>(`/social-connections${query}`);
+  },
+  startSocialOAuth(provider: "linkedin" | "facebook") {
+    return request<{ authUrl: string }>(`/social-connections/oauth/${provider}/start`, {
+      method: "POST"
+    });
+  },
+  disconnectSocialConnection(id: string) {
+    return request<ApiSocialConnection>(`/social-connections/${id}`, {
+      method: "DELETE"
+    });
+  },
   getVideoDrafts(contentId: string) {
     return request<ApiVideoDraft[]>(`/video-drafts/content/${contentId}`);
   },
@@ -253,6 +291,7 @@ export const api = {
     contentId: string;
     platform: ApiPublicationPlatform;
     scheduledAt: string;
+    socialConnectionId?: string;
   }) {
     return request<ApiPublicationJob>("/publications/schedule", {
       method: "POST",

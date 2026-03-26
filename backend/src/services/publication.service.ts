@@ -1,7 +1,55 @@
-import { publicationRepo } from "../repositories/publication.repo";
+import { Prisma, PublicationPlatform } from "@prisma/client";
 import { contentRepo } from "../repositories/content.repo";
+import { publicationRepo } from "../repositories/publication.repo";
+import { socialConnectionRepo } from "../repositories/social-connection.repo";
 import { videoDraftRepo } from "../repositories/video-draft.repo";
+import { videoRepo } from "../repositories/video.repo";
+import { facebookPublisher, linkedinPublisher, resolveShareableUrl } from "../providers/publishing";
+import { PublishableJob } from "../providers/publishing/types";
+import { socialConnectionService } from "./social-connection.service";
 import { AppError } from "../utils/errors";
+
+function serializeJson(value: unknown) {
+  return value as Prisma.InputJsonValue;
+}
+
+async function resolvePublishableJob(job: Awaited<ReturnType<typeof publicationRepo.getById>>) {
+  if (!job) {
+    throw new AppError("Publication job not found", 404);
+  }
+
+  let connection = job.socialConnection;
+
+  if (!connection) {
+    connection = await socialConnectionRepo.getFirstActiveByUserAndPlatform(job.content.createdById, job.platform);
+  }
+
+  if (!connection) {
+    throw new AppError(`No active ${job.platform === "LINKEDIN" ? "LinkedIn" : "Facebook"} connection found`, 400);
+  }
+
+  const preparedConnection = await socialConnectionService.prepareForPublishing(connection);
+
+  return {
+    ...job,
+    socialConnection: preparedConnection
+  } as PublishableJob;
+}
+
+async function publishJob(job: PublishableJob) {
+  const latestCompletedVideo = await videoRepo.getLatestCompletedByContent(job.contentId);
+  const shareableUrl = resolveShareableUrl(job.content, latestCompletedVideo?.videoUrl ?? null);
+
+  if (job.platform === "LINKEDIN") {
+    return linkedinPublisher.publish(job, shareableUrl);
+  }
+
+  if (job.platform === "FACEBOOK") {
+    return facebookPublisher.publish(job, shareableUrl);
+  }
+
+  throw new AppError("Unsupported publication platform", 400);
+}
 
 export const publicationService = {
   async syncContentScheduledAt(contentId: string) {
@@ -11,10 +59,20 @@ export const publicationService = {
       scheduledAt: nextPendingJob?.scheduledAt ?? null
     });
   },
-  async schedule(contentId: string, platform: "LINKEDIN" | "FACEBOOK", scheduledAt: string) {
+  async schedule(
+    contentId: string,
+    platform: PublicationPlatform,
+    scheduledAt: string,
+    userId: string,
+    socialConnectionId?: string
+  ) {
     const content = await contentRepo.getById(contentId);
     if (!content) {
       throw new AppError("Content not found", 404);
+    }
+
+    if (content.createdById !== userId) {
+      throw new AppError("You cannot schedule content owned by another user", 403);
     }
 
     if (content.status !== "READY") {
@@ -34,9 +92,12 @@ export const publicationService = {
       throw new AppError("scheduledAt must be a future date", 400);
     }
 
+    const socialConnection = await socialConnectionService.resolveConnectionForScheduling(userId, platform, socialConnectionId);
+
     const job = await publicationRepo.create({
       content: { connect: { id: contentId } },
       platform,
+      socialConnection: { connect: { id: socialConnection.id } },
       scheduledAt: when,
       status: "PENDING"
     });
@@ -66,11 +127,22 @@ export const publicationService = {
   async processDueJobs() {
     const dueJobs = await publicationRepo.getDue(new Date());
 
-    for (const job of dueJobs) {
+    for (const queuedJob of dueJobs) {
       try {
+        const job = await resolvePublishableJob(queuedJob);
+        const publishResult = await publishJob(job);
+
         await publicationRepo.update(job.id, {
           status: "SENT",
-          externalPostId: `mock-${job.id}`
+          socialConnection: { connect: { id: job.socialConnection.id } },
+          externalPostId: publishResult.externalPostId,
+          externalPostUrl: publishResult.externalPostUrl ?? null,
+          payloadSnapshot: serializeJson(publishResult.payloadSnapshot),
+          errorMessage: null,
+          lastAttemptAt: new Date(),
+          attemptCount: {
+            increment: 1
+          }
         });
 
         await contentRepo.update(job.contentId, {
@@ -80,9 +152,13 @@ export const publicationService = {
 
         await this.syncContentScheduledAt(job.contentId);
       } catch (error) {
-        await publicationRepo.update(job.id, {
+        await publicationRepo.update(queuedJob.id, {
           status: "FAILED",
-          errorMessage: error instanceof Error ? error.message : "Unknown error"
+          errorMessage: error instanceof Error ? error.message : "Unknown error",
+          lastAttemptAt: new Date(),
+          attemptCount: {
+            increment: 1
+          }
         });
       }
     }

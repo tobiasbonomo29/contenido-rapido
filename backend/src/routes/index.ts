@@ -8,6 +8,7 @@ import { publicationRoutes } from "./publication.routes";
 import { dashboardRoutes } from "./dashboard.routes";
 import { uploadRoutes } from "./upload.routes";
 import { videoDraftRoutes } from "./video-draft.routes";
+import { socialConnectionRoutes } from "./social-connection.routes";
 
 export const routes = Router();
 
@@ -20,3 +21,4 @@ routes.use("/video-drafts", videoDraftRoutes);
 routes.use("/publications", publicationRoutes);
 routes.use("/dashboard", dashboardRoutes);
 routes.use("/uploads", uploadRoutes);
+routes.use("/social-connections", socialConnectionRoutes);

@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Database, Palette, BookOpen, Plus, LogOut } from 'lucide-react';
+import { LayoutDashboard, Database, Palette, BookOpen, Plus, LogOut, Share2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/context/AuthContext';
@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
   { label: 'Contenido', icon: Database, path: '/contenido' },
+  { label: 'Canales', icon: Share2, path: '/canales' },
   { label: 'Plantillas', icon: Palette, path: '/plantillas' },
   { label: 'Fuentes', icon: BookOpen, path: '/fuentes' },
 ];
