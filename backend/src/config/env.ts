@@ -29,7 +29,21 @@ function parseCsv(value: string | undefined, fallback: string[]) {
     .filter(Boolean);
 }
 
+function parseAllowedOrigins(value: string | undefined, fallback: string[]) {
+  if (!value) {
+    return fallback;
+  }
+
+  if (value.trim() === "*") {
+    return "*";
+  }
+
+  return parseCsv(value, fallback);
+}
+
 const port = process.env.PORT ? Number(process.env.PORT) : 4000;
+const defaultFrontendAppUrl = process.env.FRONTEND_APP_URL || "http://localhost:8080";
+const allowedOrigins = parseAllowedOrigins(process.env.CORS_ORIGIN, [defaultFrontendAppUrl]);
 
 export const env = {
   port,
@@ -37,9 +51,9 @@ export const env = {
   jwtSecret: process.env.JWT_SECRET || "",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || "7d",
   uploadDir: process.env.UPLOAD_DIR || "uploads",
-  corsOrigin: process.env.CORS_ORIGIN || "*",
+  corsOrigin: allowedOrigins,
   appBaseUrl: process.env.APP_BASE_URL || `http://localhost:${port}`,
-  frontendAppUrl: process.env.FRONTEND_APP_URL || "http://localhost:8084",
+  frontendAppUrl: defaultFrontendAppUrl,
   videoProvider: resolveVideoProvider(process.env.VIDEO_PROVIDER),
   videoAutoGenerateOnApproval: parseBoolean(process.env.VIDEO_AUTO_GENERATE_ON_APPROVAL, true),
   videoSyncMinAgeMs: process.env.VIDEO_SYNC_MIN_AGE_MS ? Number(process.env.VIDEO_SYNC_MIN_AGE_MS) : 5000,
