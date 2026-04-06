@@ -12,7 +12,7 @@ services:
     plan: free
     region: ohio
     buildCommand: npm install && npx prisma generate && npm run build
-    startCommand: npm start
+    startCommand: npx prisma migrate deploy && npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
@@ -30,15 +30,15 @@ services:
       - key: UPLOAD_DIR
         value: uploads
       - key: CORS_ORIGIN
-        sync: false
+        value: https://contenido-rapido-web-staging.onrender.com
       - key: APP_BASE_URL
-        sync: false
+        value: https://contenido-rapido-api-staging.onrender.com
       - key: FRONTEND_APP_URL
-        sync: false
+        value: https://contenido-rapido-web-staging.onrender.com
       - key: VIDEO_PROVIDER
         value: mock
       - key: VIDEO_AUTO_GENERATE_ON_APPROVAL
-        value: false
+        value: "false"
       - key: VIDEO_SYNC_MIN_AGE_MS
         value: 5000
       - key: OPENAI_API_KEY
@@ -50,7 +50,7 @@ services:
       - key: LINKEDIN_CLIENT_SECRET
         sync: false
       - key: LINKEDIN_REDIRECT_URI
-        sync: false
+        value: https://contenido-rapido-api-staging.onrender.com/api/social-connections/oauth/linkedin/callback
       - key: LINKEDIN_API_VERSION
         value: "202602"
       - key: LINKEDIN_SCOPES
@@ -60,7 +60,7 @@ services:
       - key: FACEBOOK_APP_SECRET
         sync: false
       - key: FACEBOOK_REDIRECT_URI
-        sync: false
+        value: https://contenido-rapido-api-staging.onrender.com/api/social-connections/oauth/facebook/callback
       - key: FACEBOOK_GRAPH_VERSION
         value: v23.0
       - key: FACEBOOK_SCOPES
@@ -80,7 +80,7 @@ services:
       - key: NODE_VERSION
         value: 20
       - key: VITE_API_URL
-        sync: false
+        value: https://contenido-rapido-api-staging.onrender.com/api
       - key: VITE_SUPABASE_URL
         sync: false
       - key: VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY

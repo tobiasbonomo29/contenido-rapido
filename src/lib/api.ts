@@ -1,4 +1,4 @@
-const DEFAULT_API_URL = "http://localhost:4002/api";
+const DEFAULT_API_URL = "https://contenido-rapido-api-staging.onrender.com/api";
 const API_URL = import.meta.env.VITE_API_URL || DEFAULT_API_URL;
 const API_ORIGIN = new URL(API_URL).origin;
 
