@@ -1,9 +1,3 @@
-databases:
-  - name: contenido-rapido-db
-    databaseName: contenido_rapido
-    user: contenido_rapido
-    plan: free
-
 services:
   - type: web
     name: contenido-rapido-api-staging
@@ -18,9 +12,7 @@ services:
       - key: NODE_VERSION
         value: 20
       - key: DATABASE_URL
-        fromDatabase:
-          name: contenido-rapido-db
-          property: connectionString
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: JWT_EXPIRES_IN
